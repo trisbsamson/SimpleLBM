@@ -13,22 +13,28 @@
 int main(int argc, char *argv[]) {
     MPI_Init(&argc,&argv);
        
-    int world_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    int mpi_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
-    int world_size;
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    int mpi_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+
     std::cout.precision(20);
     clock_t tStart = clock();
-    if(world_rank == 0) {
-      
 
-      Solver s;
-      s.init();
+    Solver s;
+    s.mpi_rank = mpi_rank;
+    s.mpi_size = mpi_size;
+    
+    s.init();
+    s.mpiDivideDomain();
+    s.initialiseStorage();
+
+    if(mpi_rank == 0) {
       s.setInitialState();
       s.mainLoop();
     } else {
-      printf("processor %d waiting for main loop to finish! \n", world_rank);
+      printf("processor %d waiting for main loop to finish! \n", mpi_rank);
     }
     
 

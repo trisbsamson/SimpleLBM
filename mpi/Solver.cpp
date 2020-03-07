@@ -1,11 +1,15 @@
 #include <iostream>
 #include <math.h>
+#include <mpi.h>
 #include "vtkOutput.h"
 #include "string"
 #include <time.h>
 #include "Solver.h"
-#include "MPIRegion.h"
 
+/**
+ * Initializes all simulation parameters.
+ * 
+ **/
 void Solver::init() {
 
     w0 = 4.0 / 9.0;
@@ -29,11 +33,39 @@ void Solver::init() {
     // calculate relaxation time
     tau_f = nu_f * 3.0 / (S * dt) + 0.5;
 
-    nt = 200;
-    nx = 201;
-    nz = 201;
+    nt = 50;
+    nx = 101;
+    nz = 101;
+}
 
-    // initialize dynamic storage arrays
+/**
+ * Computes domain boundaries for each processor region.
+ * 
+ **/
+void Solver::mpiDivideDomain() {
+    regions = new MPIRegion[mpi_size];
+    if(mpi_rank == 0) {
+        for(int i = 0; i < mpi_size; i++) {
+            regions[i].nz = nz / mpi_size;
+            if(i == mpi_size - 1) {
+                regions[i].nz += nz % mpi_size;
+            }
+            regions[i].nx = nx;
+            
+            regions[i].nx0 = 0;
+            regions[i].nz0 = i * (nz / mpi_size);
+        }
+        
+    }
+    MPI_Bcast(regions, mpi_size * sizeof(MPIRegion), MPI_BYTE, 0, MPI_COMM_WORLD);
+}
+
+/**
+ * Sets up local and global storage arrays.
+ * 
+ **/
+void Solver::initialiseStorage() {
+    // initialise global dynamic storage arrays - we need to do this on each thread so all nodes have access to global results
     f = new double**[na];
     f_stream = new double**[na];
     f_eq = new double**[na];
@@ -69,24 +101,51 @@ void Solver::init() {
         u2[j] = new double[nx];
         cu[j] = new double[nx];
     }
-}
-
-void Solver::MPIDivideDomain() {
-    regions = new MPIRegion[mpi_size];
-    if(mpi_rank == 0) {
-        for(int i = 0; i < mpi_size; i++) {
-            regions[i].nz = nz / mpi_size;
-            if(i == mpi_size - 1) {
-                regions[i].nz += nz % mpi_size;
-            }
-            regions[i].nx = nx;
-            
-            regions[i].nx0 = 0;
-            regions[i].nz0 = i * (nz / mpi_size);
+    
+    // initialise local storage arrays for each thread - this is where the computations will take place
+    local_f = new double**[na];
+    local_f_stream = new double**[na];
+    local_f_eq = new double**[na];
+    local_Delta_f = new double**[na];
+    local_u = new double**[D];
+    local_Pi = new double**[D];
+    local_rho = new double*[regions[mpi_rank].nz];
+    local_u2 = new double*[regions[mpi_rank].nz];
+    local_cu = new double*[regions[mpi_rank].nz];
+    
+    for(int i = 0; i < na; i++) {
+        local_f[i] = new double*[regions[mpi_rank].nz];
+        local_f_stream[i] = new double*[regions[mpi_rank].nz];
+        local_f_eq[i] = new double*[regions[mpi_rank].nz];
+        local_Delta_f[i] = new double*[regions[mpi_rank].nz];
+        for(int j = 0; j < regions[mpi_rank].nz; j++) {
+            local_f[i][j] = new double[regions[mpi_rank].nx];
+            local_f_stream[i][j] = new double[regions[mpi_rank].nx];
+            local_f_eq[i][j] = new double[regions[mpi_rank].nx];
+            local_Delta_f[i][j] = new double[regions[mpi_rank].nx];
         }
     }
+    
+    for(int d = 0; d < D; d++) {
+        local_u[d] = new double*[regions[mpi_rank].nz];
+        local_Pi[d] = new double*[regions[mpi_rank].nz];
+        for(int j = 0; j < regions[mpi_rank].nz; j++) {
+            local_u[d][j] = new double[regions[mpi_rank].nx];
+            local_Pi[d][j] = new double[regions[mpi_rank].nx];
+        }
+    }
+    for(int j = 0; j < regions[mpi_rank].nz; j++) {
+        local_rho[j] = new double[regions[mpi_rank].nx];
+        local_u2[j] = new double[regions[mpi_rank].nx];
+        local_cu[j] = new double[regions[mpi_rank].nx];
+    }
+    
 }
 
+/**
+ * Initialises the flow state. Density is initialised to rho_0 everywhere. Source is also defined here.
+ * 
+ **/
 void Solver::setInitialState() {
     // set initial density
     for(int i = 0; i < nz; i++) {
@@ -107,6 +166,10 @@ void Solver::setInitialState() {
     }
 }
 
+/**
+ * Main calculation loop - does all iterations of LBM here.
+ * 
+ **/
 void Solver::mainLoop() {
     // main simulation loop
     for(int t = 0; t <= nt; t++) {

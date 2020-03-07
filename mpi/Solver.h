@@ -53,10 +53,22 @@ class Solver {
     double** u2;
     double** cu;
 
+    double*** local_f;
+    double*** local_f_stream;
+    double*** local_f_eq;
+    double*** local_Delta_f;
+    double*** local_u;
+    double*** local_Pi;
+    double** local_rho;
+    double** local_u2;
+    double** local_cu;
+
     double rho_0; // initial density
 
-    void MPIDivideDomain();
+    
     void init();
+    void mpiDivideDomain();
+    void initialiseStorage();
     void setInitialState();
     void mainLoop();
     void write_vtk_frame(char* fileName, double** data, int nx, int nz);
