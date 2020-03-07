@@ -31,10 +31,10 @@ int main(int argc, char *argv[]) {
     s.init();
     s.mpiDivideDomain();
     s.initialiseStorage();
-    
     // to be run on all threads after other methods have been updated to allow mpi
     if(mpi_rank == 0) {
       s.setInitialState();
+      
       s.mainLoop();
     } else {
       printf("processor %d waiting for main loop to finish! \n", mpi_rank);

@@ -6,6 +6,9 @@
 #include <time.h>
 #include "Solver.h"
 
+int allocate2DArray(double*** array, int n, int m);
+int allocate3DArray(double**** array, int n, int m, int o);
+
 /**
  * Initializes all simulation parameters.
  * 
@@ -38,7 +41,7 @@ void Solver::init() {
     tau_f = nu_f * 3.0 / (S * dt) + 0.5;
 
     // set lattice size and simulation time size
-    nt = 50;
+    nt = 100;
     nx = 101;
     nz = 101;
 }
@@ -76,80 +79,25 @@ void Solver::mpiDivideDomain() {
  **/
 void Solver::initialiseStorage() {
     // initialise global dynamic storage arrays - we need to do this on each thread so all nodes have access to global results
-    f = new double**[na];
-    f_stream = new double**[na];
-    f_eq = new double**[na];
-    Delta_f = new double**[na];
-    u = new double**[D];
-    Pi = new double**[D];
-    rho = new double*[nz];
-    u2 = new double*[nz];
-    cu = new double*[nz];
-    // dynamically allocate memory to each array
-    for(int i = 0; i < na; i++) {
-        f[i] = new double*[nz];
-        f_stream[i] = new double*[nz];
-        f_eq[i] = new double*[nz];
-        Delta_f[i] = new double*[nz];
-        for(int j = 0; j < nz; j++) {
-            f[i][j] = new double[nx];
-            f_stream[i][j] = new double[nx];
-            f_eq[i][j] = new double[nx];
-            Delta_f[i][j] = new double[nx];
-        }
-    }
-    for(int d = 0; d < D; d++) {
-        u[d] = new double*[nz];
-        Pi[d] = new double*[nz];
-        for(int j = 0; j < nz; j++) {
-            u[d][j] = new double[nx];
-            Pi[d][j] = new double[nx];
-        }
-    }
-    for(int j = 0; j < nz; j++) {
-        rho[j] = new double[nx];
-        u2[j] = new double[nx];
-        cu[j] = new double[nx];
-    }
-    
-    // initialise local storage arrays for each thread - this is where the computations will take place
-    local_f = new double**[na];
-    local_f_stream = new double**[na];
-    local_f_eq = new double**[na];
-    local_Delta_f = new double**[na];
-    local_u = new double**[D];
-    local_Pi = new double**[D];
-    local_rho = new double*[regions[mpi_rank].nz];
-    local_u2 = new double*[regions[mpi_rank].nz];
-    local_cu = new double*[regions[mpi_rank].nz];
-    // dynamically allocate memory to each array
-    for(int i = 0; i < na; i++) {
-        local_f[i] = new double*[regions[mpi_rank].nz];
-        local_f_stream[i] = new double*[regions[mpi_rank].nz];
-        local_f_eq[i] = new double*[regions[mpi_rank].nz];
-        local_Delta_f[i] = new double*[regions[mpi_rank].nz];
-        for(int j = 0; j < regions[mpi_rank].nz; j++) {
-            local_f[i][j] = new double[regions[mpi_rank].nx];
-            local_f_stream[i][j] = new double[regions[mpi_rank].nx];
-            local_f_eq[i][j] = new double[regions[mpi_rank].nx];
-            local_Delta_f[i][j] = new double[regions[mpi_rank].nx];
-        }
-    }
-    
-    for(int d = 0; d < D; d++) {
-        local_u[d] = new double*[regions[mpi_rank].nz];
-        local_Pi[d] = new double*[regions[mpi_rank].nz];
-        for(int j = 0; j < regions[mpi_rank].nz; j++) {
-            local_u[d][j] = new double[regions[mpi_rank].nx];
-            local_Pi[d][j] = new double[regions[mpi_rank].nx];
-        }
-    }
-    for(int j = 0; j < regions[mpi_rank].nz; j++) {
-        local_rho[j] = new double[regions[mpi_rank].nx];
-        local_u2[j] = new double[regions[mpi_rank].nx];
-        local_cu[j] = new double[regions[mpi_rank].nx];
-    }
-    
+    allocate3DArray(&f, na, nz, nx);
+    allocate3DArray(&f_stream, na, nz, nx);
+    allocate3DArray(&f_eq, na, nz, nx);
+    allocate3DArray(&Delta_f, na, nz, nx);
+    allocate3DArray(&u, D, nz, nx);
+    allocate3DArray(&Pi, D, nz, nx);
+    allocate2DArray(&rho, nz, nx);
+    allocate2DArray(&u2, nz, nx);
+    allocate2DArray(&cu, nz, nx);
+
+    allocate3DArray(&local_f, na, regions[mpi_rank].nz, regions[mpi_rank].nx);
+    allocate3DArray(&local_f_stream, na, regions[mpi_rank].nz, regions[mpi_rank].nx);
+    allocate3DArray(&local_f_eq, na, regions[mpi_rank].nz, regions[mpi_rank].nx);
+    allocate3DArray(&local_Delta_f, na, regions[mpi_rank].nz, regions[mpi_rank].nx);
+    allocate3DArray(&local_u, D, regions[mpi_rank].nz, regions[mpi_rank].nx);
+    allocate3DArray(&local_Pi, D, regions[mpi_rank].nz, regions[mpi_rank].nx);
+    allocate2DArray(&local_rho, regions[mpi_rank].nz, regions[mpi_rank].nx);
+    allocate2DArray(&local_u2, regions[mpi_rank].nz, regions[mpi_rank].nx);
+    allocate2DArray(&local_cu, regions[mpi_rank].nz, regions[mpi_rank].nx);
 }
 
 /**
@@ -176,9 +124,17 @@ void Solver::setInitialState() {
             }
         }
     //}
+    /*if(mpi_rank == 1) {
+        printf("Here\n");
+    }
     // distribute to all other threads
-    //MPI_Bcast(rho, nx * nz, MPI_FLOAT, 0, MPI_COMM_WORLD);
-    //MPI_Bcast(f, na * nx * nz, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&(rho[0][0]), nx * nz, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    if(mpi_rank == 1) {
+        printf("Not here\n");
+    }
+    MPI_Bcast(&(f[0][0][0]), na * nx * nz, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    */
+    
 }
 
 /**
@@ -276,4 +232,103 @@ void Solver::write_vtk_frame(char* fileName, double** data, int nx, int nz) {
     f.WriteField((char*)"rho", (void *) data_flat, sizeof(double), (char*)"Float64", 1);
 	f.Finish();
 	f.Close();
+}
+
+/**
+ * Standard function to allocate memory for 2-dimensional array
+ * 
+ * Parameters:
+ *  array: pointer to root of array
+ *  n: size of n-dimension
+ *  m: size of m-dimension
+ **/
+int allocate2DArray(float*** array, int n, int m) {
+    // allocate the contiguous memory
+    float* p = (float*)malloc(n * m * sizeof(float));
+    if(!p) {
+        return -1;
+    }
+
+    // allocate pointers - use a few cases for now as I cbf figuring out how to generalize this
+    (*array) = (float**)malloc(n * sizeof(char));
+    if(!(*array)) {
+        free(p);
+        return -1;
+    }
+
+    // set up pointers to contiguous memory
+    for(int i = 0; i < n; i++) {
+        (*array)[i] = &(p[i * m]);
+    }
+    
+    return 0;
+}
+
+/**
+ * Standard function to allocate memory for 2-dimensional array
+ * 
+ * Parameters:
+ *  array: pointer to root of array
+ *  n: size of n-dimension
+ *  m: size of m-dimension
+ **/
+int allocate2DArray(double*** array, int n, int m) {
+    // allocate the contiguous memory
+    double* p = (double*)malloc(n * m * sizeof(double));
+    if(!p) {
+        return -1;
+    }
+
+    // allocate row pointers
+    (*array) = (double**)malloc(n * sizeof(double));
+    if(!(*array)) {
+        free(p);
+        return -1;
+    }
+
+    // set up pointers to contiguous memory
+    for(int i = 0; i < n; i++) {
+        (*array)[i] = &(p[i * m]);
+    }
+    
+    return 0;
+}
+
+/**
+ * Standard function to allocate memory for 3-dimensional array
+ * 
+ * Parameters:
+ *  array: pointer to root of array
+ *  n: size of n-dimension
+ *  m: size of m-dimension
+ *  o: size of o-dimension
+ **/
+int allocate3DArray(double**** array, int n, int m, int o) {
+    // allocate the contiguous memory
+    double* p = (double*)malloc(n * m * o * sizeof(double));
+    if(!p) {
+        return -1;
+    }
+
+    // allocate pointers for first levels (planes)
+    (*array) = (double***)malloc(n * sizeof(double*));
+    if(!(*array)) {
+        free(p);
+        return -1;
+    }
+    double** mPointers = (double**)malloc(n * m * sizeof(double*));
+
+    // allocate pointers for second levels (rows)
+    for(int i = 0; i < n; i++) {
+        (*array)[i] = &(mPointers[i * m]);
+    }
+
+    // set up pointers to contiguous memory
+    for(int i = 0; i < n; i++) {
+        for(int j = 0; j < m; j++) {
+            mPointers[i * m + j] = &(p[i * m * o + j * o]);
+        }  
+    }
+    
+    return 0;
 }
