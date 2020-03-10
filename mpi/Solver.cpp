@@ -105,7 +105,7 @@ void Solver::initialiseStorage() {
  * 
  **/
 void Solver::setInitialState() {
-    //if(mpi_rank == 0) {
+    if(mpi_rank == 0) {
         // set initial density
         for(int i = 0; i < nz; i++) {
             for(int j = 0; j < nx; j++) {
@@ -123,17 +123,11 @@ void Solver::setInitialState() {
                 }
             }
         }
-    //}
-    /*if(mpi_rank == 1) {
-        printf("Here\n");
     }
+
     // distribute to all other threads
     MPI_Bcast(&(rho[0][0]), nx * nz, MPI_FLOAT, 0, MPI_COMM_WORLD);
-    if(mpi_rank == 1) {
-        printf("Not here\n");
-    }
     MPI_Bcast(&(f[0][0][0]), na * nx * nz, MPI_FLOAT, 0, MPI_COMM_WORLD);
-    */
     
 }
 

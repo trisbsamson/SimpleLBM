@@ -31,9 +31,10 @@ int main(int argc, char *argv[]) {
     s.init();
     s.mpiDivideDomain();
     s.initialiseStorage();
+    s.setInitialState();
     // to be run on all threads after other methods have been updated to allow mpi
     if(mpi_rank == 0) {
-      s.setInitialState();
+      
       
       s.mainLoop();
     } else {
