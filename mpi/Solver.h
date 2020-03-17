@@ -1,5 +1,6 @@
 #include <math.h>
 #include "MPIRegion.h"
+#include <mpi.h>
 
 class Solver {
     public:
@@ -42,6 +43,22 @@ class Solver {
     int nx; // X-axis size
     int nz; // Z-axis size
 
+    int* local_rows;
+    int* displacements_2d;
+    MPI_Datatype row_type_2d;
+
+    int* domainSizes_2d;
+    int* subdomainSizes_2d;
+    int* startIndices_2d;
+
+    int* domainSizes_3d_a;
+    int* subdomainSizes_3d_a;
+    int* startIndices_3d_a;
+    
+    int* domainSizes_3d_D;
+    int* subdomainSizes_3d_D;
+    int* startIndices_3d_D;
+
     // initialize storage arrays
     double*** f;
     double*** f_stream;
@@ -64,6 +81,7 @@ class Solver {
     double** local_cu;
 
     double rho_0; // initial density
+    
 
     
     void init();

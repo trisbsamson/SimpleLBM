@@ -42,8 +42,56 @@ void Solver::init() {
 
     // set lattice size and simulation time size
     nt = 100;
-    nx = 101;
-    nz = 101;
+    nx = 100;
+    nz = 100;
+
+    // create MPI data type for sending to processes
+    /*domainSizes_2d = new int[2] {nx, nz};
+    subdomainSizes_2d = new int[2] {nx, nz / mpi_size};
+    startIndices_2d = new int[2] {0, 0};
+
+    domainSizes_3d_a = new int[3] {na, nz, nx};
+    subdomainSizes_3d_a = new int[3] {na, nz / mpi_size, nx};
+    startIndices_3d_a = new int[3] {0, 0, 0};
+
+    domainSizes_3d_D = new int[3] {D, nz, nx};
+    subdomainSizes_3d_D = new int[3] {D, nz / mpi_size, nx};
+    startIndices_3d_D = new int[3] {0, 0, 0};
+
+    MPI_Datatype type_2d, subType_2d, type_3d_a, subType_3d_a, type_3d_D, subType_3d_D;
+
+    int sizes_2d[2] = {nz, nx};
+    int subsizes_2d[2] = {nz / mpi_size, nx};
+    int starts_2d[2] = {0, 0};
+    int sizes_3d_a[3] = {na, nz, nx};
+    int subsizes_3d_a[3] = {na, nz / mpi_size, nx};
+    int starts_3d_a[3] = {0, 0, 0};
+    int sizes_3d_D[3] = {D, nz, nx};
+    int subsizes_3d_D[3] = {D, nz / mpi_size, nx};
+    int starts_3d_D[3] = {0, 0, 0};
+    MPI_Datatype type_2d, subarrtype_2d, type_3d_a, subarrtype_3d_a, type_3d_D, subarrtype_3d_D;
+    MPI_Type_create_subarray(2, sizes_2d, subsizes_2d, starts_2d, MPI_ORDER_C, MPI_DOUBLE, &type_2d);
+    MPI_Type_create_subarray(3, sizes_3d_a, subsizes_3d_a, starts_3d_a, MPI_ORDER_C, MPI_DOUBLE, &type_3d_a);
+    MPI_Type_create_subarray(3, sizes_3d_D, subsizes_3d_D, starts_3d_D, MPI_ORDER_C, MPI_DOUBLE, &type_3d_D);
+
+    MPI_Type_create_resized(type_2d, 0, )*/
+
+    // split only over number of rows
+    local_rows = new int[mpi_size];
+    for(int i = 0; i < mpi_size; i++) {
+        local_rows[i] = nz / mpi_size;
+    }
+
+    
+    MPI_Type_contiguous(nx, MPI_DOUBLE, &row_type_2d);
+    MPI_Type_commit(&row_type_2d);
+
+    displacements_2d = new int[mpi_size];
+    
+    displacements_2d[0] = 0;
+    for(int m = 1; m < mpi_size; m++) {
+        displacements_2d[m] = displacements_2d[m-1] + local_rows[m-1];
+    }
 }
 
 /**
@@ -128,7 +176,9 @@ void Solver::setInitialState() {
     // distribute to all other threads
     MPI_Bcast(&(rho[0][0]), nx * nz, MPI_FLOAT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&(f[0][0][0]), na * nx * nz, MPI_FLOAT, 0, MPI_COMM_WORLD);
-    
+
+    MPI_Scatterv(&(rho[0][0]), local_rows, displacements_2d, row_type_2d, &(local_rho[0][0]), local_rows[mpi_rank], row_type_2d, 0, MPI_COMM_WORLD);
+    printf("Local rho at 10, 10: %f\n", local_rho[0][0]);
 }
 
 /**
@@ -136,6 +186,8 @@ void Solver::setInitialState() {
  * 
  **/
 void Solver::mainLoop() {
+    
+
     // main simulation loop
     for(int t = 0; t <= nt; t++) {
         // (0) output current state
